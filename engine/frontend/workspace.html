@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>DocVault Enterprise</title>
+<style>
+    <!-- __CSS_BUNDLE__ -->
+</style>
+
+</head>
+<body>
+<div id="nav">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+    <span style="font-size:16px;font-weight:bold;color:var(--accent);letter-spacing:1.5px;font-family:'Segoe UI', sans-serif;">AXE-Anchor</span>
+    <span style="font-size:9px;background:var(--accent);color:var(--text-bright);padding:2px 6px;border-radius:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;">Ecosystem</span>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;">
+    <!-- Run Builder Button -->
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+      <button id="btnRunBuilder" onclick="window.runBuilder()" style="flex:1;background:var(--panel-dark);border:1px solid var(--border);color:var(--accent);font-weight:bold;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;font-size:12px;cursor:pointer;transition:background 0.2s;">
+        ⚙️ Run Builder (python)
+      </button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <input id="search" placeholder="Search 1..." oninput="window.runGlobalSearch()" onkeydown="if(event.key==='Enter'){window.runGlobalSearch()}" style="flex:1;min-width:0;">
+      <input id="search2" placeholder="Search 2..." oninput="window.runGlobalSearch()" onkeydown="if(event.key==='Enter'){window.runGlobalSearch()}" style="flex:1;min-width:0;">
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+      <select id="searchMode" onchange="window.runGlobalSearch()" style="font-size:11px;padding:5px 6px;flex:1;">
+        <option value="all">All</option>
+        <option value="context">Context</option>
+        <option value="schema">Schema objects</option>
+        <option value="files">Files only</option>
+      </select>
+      <button class="assoc-back-btn" style="padding:5px 10px;" onclick="window.runGlobalSearch()">Search</button>
+
+      <button class="assoc-back-btn" style="padding:5px 10px;" onclick="document.getElementById('search').value='';document.getElementById('search2').value='';window.runGlobalSearch()">Clear</button>
+      <span id="chunkLoadIndicator" style="font-size:10px;color:#fbbf24;"></span>
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);line-height:1.25;">
+      Full context search scans file contents. Schema search scans tables, views, procs, and fields.
+    </div>
+  </div>
+  <hr style="border-color:var(--border); width:100%;">
+  <div style="display:flex; gap:5px; flex-wrap:wrap;">
+    <button id="btnNavExplorer" class="nav-btn" onclick="nav('explorer')">Explorer</button>
+    <button id="btnNavLineage" class="nav-btn" onclick="nav('lineage')">Graph</button>
+    <button id="btnNavCompendium" class="nav-btn" onclick="nav('compendium')">Compendium</button>
+    <button id="btnNavTodos" class="nav-btn" onclick="nav('todos')" title="Show all TODO/FIXME annotations in codebase" style="font-size:11px;">📋 TODOs</button>
+    <button id="btnNavExport" class="nav-btn" onclick="nav('export')" title="Reporting & Export" style="font-size:11px;">📥 Export</button>
+    <button id="btnNavWorkspaces" class="nav-btn" onclick="nav('workspaces')" title="Manage workspaces and repo sync" style="font-size:11px;">💼 Workspaces</button>
+  </div>
+  <hr style="border-color:var(--border); width:100%;">
+  <div id="typeFilterContainer" style="display:flex; flex-wrap:wrap; gap:4px; padding:4px 0; width:100%; box-sizing:border-box;"></div>
+  <hr style="border-color:var(--border); width:100%;">
+  <div id="recentHistoryPanel"></div>
+  <div id="tree"></div>
+  <div id="workspace-loading-indicator" style="display:none; padding: 10px; margin-top: 10px; border-top: 1px solid var(--border); text-align: center; font-size: 11px; color: var(--accent);">
+    <div style="margin-bottom: 4px;" id="workspace-loading-text">Loading workspace...</div>
+    <div style="width: 100%; background: var(--panel-light); height: 6px; border-radius: 3px; overflow: hidden;">
+      <div id="workspace-loading-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.5s ease;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="resizer-h" id="nav-resizer"></div>
+
+<div id="main">
+  <div id="toolbar">
+      <label>Role:</label>
+      <select id="roleSelector"><option>Viewer</option><option>Reviewer</option><option>Admin</option></select>
+      <button onclick="toggleFullScreen()" style="margin-left:10px; background:var(--panel-light);">⛶ Fullscreen</button>
+  </div>
+  <div id="content-area">
+    <div id="left">Select a tool or file.</div>
+    <div class="resizer-h" id="content-resizer" style="display:none;"></div>
+    
+    <div id="right" style="display:none;">
+      <div id="impact-top">Select a node on the graph.</div>
+      <div class="resizer-v" id="proof-resizer"></div>
+      <div id="impact-bottom">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
+          <h4 style="margin:0;color:var(--text-dim);">Proof of Connection</h4>
+          <div id="proof-tabs">
+            <button id="tab-conn" class="proof-tab active-tab" onclick="showProofTab('conn')">&#128279; Connections</button>
+            <button id="tab-kw" class="proof-tab" onclick="showProofTab('kw')">&#128269; Keyword Hits</button>
+            <button id="tab-path" class="proof-tab" onclick="showProofTab('path')">&#128279; Path Trace</button>
+            <button id="tab-rings" class="proof-tab" onclick="showProofTab('rings')">&#9673; Rings</button>
+          </div>
+        </div>
+        <div id="proof-tab-conn">
+          <div id="proof-content" style="color:var(--text-dim);font-style:italic;">Click a file in the list above to see connection proof.</div>
+        </div>
+        <div id="proof-tab-kw" style="display:none;">
+          <div id="proof-kw-content" style="color:var(--text-dim);font-style:italic;">Enter a keyword in the graph to see occurrences.</div>
+        </div>
+        <div id="proof-tab-path" style="display:none;">
+          <div id="proof-path-content" style="color:var(--text-dim);font-style:italic;">Shift+Click two nodes in the graph to trace the shortest dependency path.</div>
+        </div>
+        <div id="proof-tab-rings" style="display:none;">
+          <div id="proof-rings-content" style="color:var(--text);padding:5px 0;">Select graph nodes to configure namespace / schema rings.</div>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-open">&#x1F4C4; Open File</div>
+  <div class="ctx-item" id="ctx-folder-review">&#x1F4C1; Group Management</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-graph">&#x1F5FA; Focus in Graph</div>
+</div>
+
+
+<script id="axe-data" type="application/json">
+__DATA_PLACEHOLDER__
+</script>
+<!-- __JS_BUNDLE__ -->
+</body>
+</html>

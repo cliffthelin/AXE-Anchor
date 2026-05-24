@@ -1,0 +1,57 @@
+# AXE-Anchor .gitignore
+# Keep the repo clean of generated data, credentials, and machine-specific files.
+
+# ==========================================
+# Generated outputs (rebuilt by builder.py)
+# ==========================================
+index.html
+index_static.html
+workspace_*.html
+chunks/
+workspaces/
+
+# ==========================================
+# Configuration (contains tokens, paths, PII)
+# ==========================================
+config/
+axe_filter_settings.json
+
+# ==========================================
+# Build cache and reports
+# ==========================================
+cache/
+output/
+
+# ==========================================
+# Cloned repositories (populated at runtime)
+# ==========================================
+cloned_repos/
+
+# ==========================================
+# Legacy/temporary files with hardcoded paths
+# ==========================================
+legacy_archive/
+fix_css.py
+fix_css2.py
+fix_html.py
+fix_settings.py
+_reversa_sdd/
+traceability/
+
+# ==========================================
+# Python bytecode
+# ==========================================
+__pycache__/
+*.pyc
+*.pyo
+
+# ==========================================
+# OS and editor files
+# ==========================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/

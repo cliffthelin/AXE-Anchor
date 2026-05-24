@@ -1,0 +1,18 @@
+{
+  "name": "axe-db-drivers",
+  "version": "0.1.0",
+  "description": "AXE-Anchor database schema driver plugin for network-managed SQL servers.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AXE DB Drivers",
+    "shortDescription": "Database schema adapters for AXE-Anchor.",
+    "longDescription": "Adds optional SQLite, SQL Server, Postgres, and MySQL schema inspection adapters used by AXE-Anchor's encrypted database vault and dependency notification hub.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": ["database-schema-inspection"],
+    "defaultPrompt": "Help me configure AXE-Anchor database schema driver support."
+  }
+}

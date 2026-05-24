@@ -1,0 +1,22 @@
+{
+  "exclude": [".git", "__pycache__", "node_modules", ".venv", "venv", "site-packages"],
+  "max_csv_preview_rows": 1000,
+  "title": "AXE-Anchor",
+  "github_token": "",
+  "workspaces": [],
+  "active_workspace_id": "",
+  "graph_ignored_paths": [],
+  "scanner_rules": {
+    "exclude_folders": [".git", "__pycache__", "node_modules"],
+    "exclude_folder_patterns": ["backup", "backups", "restore", "temp", "tmp"],
+    "skip_hidden_folders": true,
+    "skip_folders_containing_ignore": true,
+    "supported_extensions": [".md", ".csv", ".json", ".txt", ".log", ".py", ".ts", ".ps1", ".cs", ".yaml", ".yml", ".xml", ".sql", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".pdf", ".docx", ".doc", ".xlsx", ".xls"],
+    "system_file_names": ["settings.json", ".env"],
+    "system_file_patterns": ["secret", "credential"],
+    "max_file_bytes": 5242880,
+    "data_dump_keywords": ["export", "dump", "output", "extract", "dataset", "report", "snapshot", "backup", "archive"],
+    "data_dump_size_thresholds": {".csv": 204800, ".json": 524288, ".xlsx": 524288, ".xls": 524288},
+    "code_repo_docs_only": true
+  }
+}
