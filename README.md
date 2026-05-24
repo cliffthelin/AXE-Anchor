@@ -81,7 +81,7 @@ All exclusion rules are in `config/settings.json` under `scanner_rules`:
 - `data_dump_keywords` / `data_dump_size_thresholds` — auto-detect data dumps
 
 ### Schema Graph
-- Parses ERD markdown, SQL DDL, PSIS mappings, data dictionaries
+- Parses ERD markdown, SQL DDL, schema mappings, data dictionaries
 - FK relationship visualization
 - Column-level search
 - Schema origin color coding
@@ -102,7 +102,9 @@ All exclusion rules are in `config/settings.json` under `scanner_rules`:
 | File | Size | Use Case |
 |------|------|----------|
 | `index.html` | ~3MB | Server mode — fast load, chunks via fetch |
-| `index_static.html` | ~20-70MB | Offline — everything embedded, works on file:// |
+| `index_static.html` | Varies | Offline — everything embedded, works on file:// |
+
+Size depends entirely on how many files and projects are configured in your workspaces.
 
 ## License
 
