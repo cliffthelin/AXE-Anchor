@@ -56,6 +56,8 @@ def run_build(script_dir, force_rebuild=False):
     active_workspace_id = config.get("active_workspace_id") or config.get("last_workspace_id")
     if workspaces and not active_workspace_id:
         active_workspace_id = workspaces[0].get("id") or workspaces[0].get("name")
+    if not active_workspace_id:
+        active_workspace_id = "__root__"
     generated_at = time.strftime('%Y-%m-%dT%H:%M:%SZ')
     data = {
         "documents": {},
@@ -303,7 +305,7 @@ def run_build(script_dir, force_rebuild=False):
         "projects": config.get("projects", []),
         "orphan_projects": config.get("orphan_projects", []),
         "password_protection_enabled": bool(config.get("password_hash")),
-        "github_token_configured": bool(config.get("github_token"))
+        "github_token_configured": bool(config.get("github_token_encrypted") or config.get("github_token"))
     }
     for ws in config.get("workspaces", []):
         ws_copy = ws.copy()

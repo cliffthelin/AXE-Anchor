@@ -5,7 +5,9 @@ import os, json
 # Description: File system wrappers to read and write UTF-8 encoded JSON objects.
 # ==============================================================================
 def load_json(path, default):
-    if os.path.exists(path): return json.load(open(path, encoding='utf-8'))
+    if os.path.exists(path):
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
     return default
 
 def save_json(path, data):

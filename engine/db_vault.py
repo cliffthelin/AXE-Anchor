@@ -9,10 +9,17 @@ import sqlite3
 import time
 from pathlib import Path
 
-import bcrypt
-from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+try:
+    import bcrypt
+    from cryptography.fernet import Fernet, InvalidToken
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+except ImportError:  # Optional until DB vault features are used.
+    bcrypt = None
+    Fernet = None
+    InvalidToken = Exception
+    hashes = None
+    PBKDF2HMAC = None
 
 from .json_io import load_json, save_json
 
@@ -67,6 +74,8 @@ def vault_status(paths):
 
 
 def set_gate(paths, password):
+    if bcrypt is None:
+        return False, {"message": "Install bcrypt and cryptography to use the database vault."}
     if not password or len(password) < 12:
         return False, {"message": "Database vault password must be at least 12 characters."}
     vault = load_vault(paths)
@@ -78,6 +87,8 @@ def set_gate(paths, password):
 
 
 def _verify_gate(vault, password):
+    if bcrypt is None:
+        raise RuntimeError("Install bcrypt and cryptography to use the database vault.")
     gate_hash = vault.get("gate_hash")
     if not gate_hash:
         raise PermissionError("Database vault gate is not configured.")
@@ -86,6 +97,8 @@ def _verify_gate(vault, password):
 
 
 def _fernet(vault, password):
+    if Fernet is None or PBKDF2HMAC is None:
+        raise RuntimeError("Install cryptography to use the database vault.")
     salt = base64.urlsafe_b64decode(vault["salt"].encode("ascii"))
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=390000)
     return Fernet(base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8"))))

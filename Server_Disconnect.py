@@ -15,28 +15,26 @@ def find_and_kill_server():
     killed = 0
 
     if sys.platform == 'win32':
-        # Windows: find python processes running Server_Connect.py
+        # Windows: stop only Python processes whose command line names this server.
         try:
             result = subprocess.run(
-                ['tasklist', '/FI', 'IMAGENAME eq python.exe', '/FO', 'CSV'],
-                capture_output=True, text=True
+                [
+                    'powershell',
+                    '-NoProfile',
+                    '-Command',
+                    "Get-CimInstance Win32_Process | "
+                    "Where-Object { $_.CommandLine -match 'Server_Connect\\.py' } | "
+                    "Select-Object -ExpandProperty ProcessId",
+                ],
+                capture_output=True,
+                text=True,
             )
-            # Use netstat to find what's on common ports
-            for port in range(8000, 8020):
-                result = subprocess.run(
-                    ['netstat', '-ano'],
-                    capture_output=True, text=True
-                )
-                for line in result.stdout.split('\n'):
-                    if f'127.0.0.1:{port}' in line and 'LISTENING' in line:
-                        parts = line.split()
-                        pid = parts[-1]
-                        try:
-                            subprocess.run(['taskkill', '/PID', pid, '/F'], capture_output=True)
-                            print(f"Killed server process (PID {pid}) on port {port}")
-                            killed += 1
-                        except Exception:
-                            pass
+            for pid in result.stdout.strip().splitlines():
+                pid = pid.strip()
+                if pid:
+                    subprocess.run(['taskkill', '/PID', pid, '/F'], capture_output=True)
+                    print(f"Stopped server process (PID {pid})")
+                    killed += 1
         except Exception as e:
             print(f"Error: {e}")
     else:
@@ -58,26 +56,6 @@ def find_and_kill_server():
                         pass
         except Exception:
             pass
-
-        # Also check for any python process holding ports 8000-8019
-        if killed == 0:
-            try:
-                result = subprocess.run(
-                    ['lsof', '-ti', 'tcp:8000-8019'],
-                    capture_output=True, text=True
-                )
-                pids = result.stdout.strip().split('\n')
-                for pid in pids:
-                    pid = pid.strip()
-                    if pid and pid != str(os.getpid()):
-                        try:
-                            os.kill(int(pid), signal.SIGTERM)
-                            print(f"Stopped process (PID {pid}) holding AXE-Anchor port")
-                            killed += 1
-                        except (ProcessLookupError, ValueError):
-                            pass
-            except Exception:
-                pass
 
     if killed == 0:
         print("No running AXE-Anchor server found.")

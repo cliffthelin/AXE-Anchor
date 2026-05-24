@@ -6,15 +6,16 @@ A platform-agnostic documentation visualization engine that scans multi-project 
 
 ```bash
 # 1. Copy the template config
+mkdir -p config
 cp config.template.json config/settings.json
 
-# 2. Edit config/settings.json to add your workspaces and projects
+# 2. Install required Python packages
+python3 -m pip install -r requirements.txt
 
-# 3. Build the dashboard
-python3 builder.py
+# 3. Edit config/settings.json to add your workspaces and projects
 
-# 4. Start the server
-python3 Server_Connect.py
+# 4. Start the server; it builds the dashboard before serving it
+python3 Server_Connect.py --no-open
 
 # 5. Open http://127.0.0.1:8000 in your browser
 ```
@@ -87,15 +88,15 @@ All exclusion rules are in `config/settings.json` under `scanner_rules`:
 - Schema origin color coding
 
 ### Security
-- Optional bcrypt password protection
-- GitHub PAT stored encrypted in settings (never exposed to UI)
-- Database credential vault with gate password
+- Bcrypt application password protection for all write, build, sync, and credential APIs
+- GitHub PATs are encrypted in settings after application password setup and are not embedded in generated HTML
+- Database credential vault with a separate gate password
 
 ## Requirements
 
 - Python 3.10+
-- No external Python dependencies for core functionality
-- Optional: `pdftotext` for PDF parsing, `bcrypt` for password protection
+- Python packages from `requirements.txt` (`bcrypt`, `cryptography`) for password, token, and database vault security
+- Optional: `pdftotext` for richer PDF parsing
 
 ## Two Output Modes
 

@@ -11,6 +11,16 @@ from ..git_sync import promote_staged_candidate, stage_git_repo_candidate, sync_
 from ..git_status import get_git_status
 from ..constants import _axe_paths
 
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+except ImportError:
+    Fernet = None
+    InvalidToken = Exception
+    hashes = None
+    PBKDF2HMAC = None
+
 SCRIPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 def axe_paths():
@@ -83,6 +93,77 @@ def allowed_folder_target(config, raw_path):
         return target
     return None
 
+def auth_password_from_header(headers):
+    auth_header = headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Basic '):
+        return None
+    try:
+        encoded_credentials = auth_header.split(' ', 1)[1]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
+        _username, password = decoded_credentials.split(':', 1)
+        return password
+    except Exception:
+        return None
+
+def github_token_configured(config):
+    return bool(config.get("github_token_encrypted") or config.get("github_token"))
+
+def github_token_fernet(password, salt_b64):
+    if Fernet is None or PBKDF2HMAC is None or hashes is None:
+        raise RuntimeError("Install requirements.txt to enable encrypted GitHub token storage.")
+    salt = base64.urlsafe_b64decode(salt_b64.encode('utf-8'))
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=390000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode('utf-8')))
+    return Fernet(key)
+
+def store_github_token(config, token, password):
+    config.pop("github_token", None)
+    if not token:
+        config.pop("github_token_encrypted", None)
+        config.pop("github_token_salt", None)
+        config.pop("github_token_updated_at", None)
+        return
+
+    salt_b64 = base64.urlsafe_b64encode(os.urandom(16)).decode('utf-8')
+    encrypted = github_token_fernet(password, salt_b64).encrypt(token.encode('utf-8')).decode('utf-8')
+    config["github_token_encrypted"] = encrypted
+    config["github_token_salt"] = salt_b64
+    config["github_token_updated_at"] = time.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+def get_github_token_for_request(config, headers):
+    encrypted = config.get("github_token_encrypted")
+    if not encrypted:
+        return config.get("github_token")
+
+    password = auth_password_from_header(headers)
+    if not password:
+        return None
+    salt_b64 = config.get("github_token_salt", "")
+    if not salt_b64:
+        return None
+    try:
+        return github_token_fernet(password, salt_b64).decrypt(encrypted.encode('utf-8')).decode('utf-8')
+    except InvalidToken:
+        return None
+
+def write_password_required(handler):
+    config = load_json(config_path(), {})
+    if config.get("password_hash"):
+        return False
+    handler.send_response(403)
+    handler.send_header('Content-Type', 'application/json')
+    handler.end_headers()
+    handler.wfile.write(json.dumps({
+        "status": "error",
+        "message": "Configure an application access password before using write, build, sync, or credential APIs.",
+    }).encode())
+    return True
+
 class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # Allow builder.py to inject CLI args on the class before handling requests
@@ -127,11 +208,8 @@ class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
                 self.send_unauthorized()
                 return False
 
-            try:
-                encoded_credentials = auth_header.split(' ', 1)[1]
-                decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-                username, password = decoded_credentials.split(':', 1)
-            except Exception:
+            password = auth_password_from_header(self.headers)
+            if password is None:
                 self.send_unauthorized()
                 return False
 
@@ -173,7 +251,7 @@ class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
             try:
                 config = load_json(config_path(), {})
                 workspaces = config.get("workspaces", [])
-                token = config.get("github_token")
+                token = get_github_token_for_request(config, self.headers)
 
                 for ws in workspaces:
                     git_statuses = {}
@@ -193,7 +271,7 @@ class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({
                     "workspaces": workspaces,
-                    "github_token_configured": bool(token),
+                    "github_token_configured": github_token_configured(config),
                     "password_protection_enabled": bool(config.get("password_hash"))
                 }).encode())
             except Exception as e:
@@ -272,6 +350,8 @@ class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
     # deletions, GitHub token authentication config, and Git pull/clone syncs.
     # ==========================================================================
     def do_POST(self):
+        if self.path != '/api/security/set-password' and write_password_required(self):
+            return
         if not self.check_authentication():
             return
         if self.path == '/run-builder':
@@ -297,7 +377,7 @@ class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
                 cfg_path = config_path()
                 config = load_json(cfg_path, {})
                 workspaces = config.get("workspaces", [])
-                token = config.get("github_token")
+                token = get_github_token_for_request(config, self.headers)
 
                 resp_data = {"status": "success"}
                 should_rebuild = False
@@ -482,11 +562,13 @@ class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
 
 
                 elif self.path == '/api/github/auth':
-                    if not config.get("password_hash") and req_data.get("github_token"):
-                        resp_data = {"status": "error", "message": "Access password must be configured under Security before storing GitHub credentials."}
+                    password = auth_password_from_header(self.headers)
+                    if not password:
+                        resp_data = {"status": "error", "message": "Authenticate with the application password before storing GitHub credentials."}
                     else:
-                        config["github_token"] = req_data.get("github_token")
+                        store_github_token(config, req_data.get("github_token"), password)
                         save_json(cfg_path, config)
+                        resp_data = {"status": "success", "github_token_configured": github_token_configured(config)}
 
                 elif self.path == '/api/security/set-password':
                     new_password = req_data.get("password")
@@ -712,31 +794,33 @@ class BuilderHTTPRequestHandler(SimpleHTTPRequestHandler):
                 elif self.path == '/api/folder/list':
                     folder_path = req_data.get("path", "")
                     if not folder_path:
-                        target = Path(SCRIPT_DIR).parent.resolve()
+                        target = Path(SCRIPT_DIR).resolve()
                     else:
-                        target = Path(folder_path).resolve()
+                        target = allowed_folder_target(config, folder_path)
 
-                    if not target.exists() or not target.is_dir():
-                        alt_target = (Path(SCRIPT_DIR) / folder_path).resolve()
-                        if alt_target.exists() and alt_target.is_dir():
-                            target = alt_target
-                        else:
-                            target = Path(SCRIPT_DIR).parent.resolve()
-
-                    subdirs = []
-                    try:
-                        for child in target.iterdir():
-                            if child.is_dir() and not child.name.startswith('.'):
-                                subdirs.append(child.name)
-                        subdirs.sort(key=str.lower)
-                        resp_data = {
-                            "status": "success",
-                            "current_path": str(target),
-                            "parent_path": str(target.parent) if target.parent != target else None,
-                            "subdirs": subdirs
-                        }
-                    except Exception as e:
-                        resp_data = {"status": "error", "message": f"Access error: {str(e)}"}
+                    roots = configured_file_roots(config)
+                    if not target or not target.exists() or not target.is_dir():
+                        resp_data = {"status": "error", "message": "Folder path is outside configured workspace/project roots or does not exist."}
+                    elif not any(is_within(target, root) for root in roots):
+                        resp_data = {"status": "error", "message": "Folder path is outside configured workspace/project roots."}
+                    else:
+                        subdirs = []
+                        try:
+                            for child in target.iterdir():
+                                if child.is_dir() and not child.name.startswith('.'):
+                                    subdirs.append(child.name)
+                            subdirs.sort(key=str.lower)
+                            parent = target.parent if target.parent != target else None
+                            if parent and not any(is_within(parent, root) for root in roots):
+                                parent = None
+                            resp_data = {
+                                "status": "success",
+                                "current_path": str(target),
+                                "parent_path": str(parent) if parent else None,
+                                "subdirs": subdirs
+                            }
+                        except Exception as e:
+                            resp_data = {"status": "error", "message": f"Access error: {str(e)}"}
 
 
                 if should_rebuild and resp_data.get("status") != "error":

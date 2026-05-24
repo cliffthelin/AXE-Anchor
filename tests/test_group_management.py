@@ -13,6 +13,7 @@ import os
 import sys
 import tempfile
 import shutil
+import base64
 
 # Add parent to path so we can import engine modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -474,6 +475,49 @@ class TestCompilerPlatformField(unittest.TestCase):
         import platform
         system = platform.system().lower()
         self.assertIn(system, ['linux', 'windows', 'darwin'])
+
+
+class TestServerSecurityHelpers(unittest.TestCase):
+    """Security regression tests for credential and folder-boundary helpers."""
+
+    def test_github_token_storage_is_encrypted(self):
+        from engine.server.handler import get_github_token_for_request, store_github_token
+
+        config = {}
+        store_github_token(config, "ghp_example_secret", "app-password")
+
+        self.assertNotIn("github_token", config)
+        self.assertIn("github_token_encrypted", config)
+        self.assertNotIn("ghp_example_secret", json.dumps(config))
+
+        auth = base64.b64encode(b"user:app-password").decode("ascii")
+        headers = {"Authorization": f"Basic {auth}"}
+        self.assertEqual(get_github_token_for_request(config, headers), "ghp_example_secret")
+
+    def test_configured_folder_target_rejects_outside_paths(self):
+        from engine.server.handler import allowed_folder_target
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            allowed_root = os.path.join(tmpdir, "allowed")
+            outside_root = os.path.join(tmpdir, "outside")
+            os.makedirs(allowed_root)
+            os.makedirs(outside_root)
+            config = {
+                "workspaces": [
+                    {
+                        "name": "Test",
+                        "projects": [
+                            {"name": "Allowed", "path": allowed_root}
+                        ],
+                    }
+                ]
+            }
+
+            self.assertEqual(str(allowed_folder_target(config, allowed_root)), allowed_root)
+            self.assertIsNone(allowed_folder_target(config, outside_root))
+        finally:
+            shutil.rmtree(tmpdir)
 
 
 if __name__ == '__main__':
